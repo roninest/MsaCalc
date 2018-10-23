@@ -54,8 +54,6 @@ public:
         std::string line, s;
         size_t columns = 0;
         std::ifstream f;
-//        std::ifstream::sync_with_stdio(false);
-//        std::ofstream::sync_with_stdio(false);
         f.open(filename.c_str());
 
 
@@ -276,7 +274,7 @@ public:
                 row++;
             }
             else {
-                std::cerr << "Line " << i << " is empty in file: " << filename << std::endl;
+                std::cerr << "Line " << i+1 << " is empty in file: " << filename << std::endl;
             }
         }
 
@@ -392,7 +390,7 @@ public:
                 row++;
             }
             else {
-                std::cerr << "Line " << i << " is empty in file: " << filename << std::endl;
+                std::cerr << "Line " << i+1 << " is empty in file: " << filename << std::endl;
             }
         }
 
@@ -465,7 +463,7 @@ public:
                 row++;
             }
             else {
-                std::cerr << "Line " << i << " is empty in file: " << filename << std::endl;
+                std::cerr << "Line " << i+1 << " is empty in file: " << filename << std::endl;
             }
         }
 
