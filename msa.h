@@ -637,23 +637,43 @@ public:
     }
 
 
-protected:
-    bool is_float(const std::string &s)
+public:
+    static bool is_float(const std::string &s)
     {
-        constexpr std::array<char, 14> digits = {'-', '.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'e', 'E'};
+        constexpr std::array<char, 11> digits = {'.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
-        for (char i : s) {
-            for (char j : digits) {
-                if (i == j) {
+        bool point = false;
+
+        auto it = s.begin();
+
+        if (*it == '-') {
+            it++;
+        }
+
+        do {
+            if (*it == '.') {
+                if (point) {
+                    return false;
+                }
+                else {
+                    point = true;
+                }
+            }
+
+            for (auto i : digits) {
+                if (i == *it) {
                     break;
                 }
-                else if (j == 'E') {
+
+                else if (i == '9') {
                     return false;
                 }
             }
-        }
 
-        return !s.empty();
+            it++;
+        } while(it != s.end());
+
+        return true;
     }
 
 
