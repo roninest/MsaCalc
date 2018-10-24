@@ -1,4 +1,5 @@
 //
+//
 // Created by balrog on 10/10/18.
 //
 #pragma once
@@ -329,14 +330,82 @@ public:
                 gp.send("set terminal png");
                 std::string cmd = std::string("set output '") +  parameters[i].name + ".png'";
                 gp.send(cmd);
-                gp.send("set grid");
-                gp.send("plot '-' with dots");
+//                gp.send("set grid");
+                gp.send("plot '-' smooth frequency with dots"); //with dots
                 gp.plot(filedump[i]);
             }
             else {
                 //No sense to plot empty data
             }
         }
+    }
+
+    void corr() {
+        long count = 0;
+
+        for (size_t i = 0; i < parameters.size(); i++)  {
+
+            for (size_t j = 0; j < parameters.size(); j++) {
+                if (i > j) {
+                    if (filedump[i].size() > 10000 && filedump[j].size() > 10000) {
+                        double coff = corr(filedump[i], filedump[j], 10000);
+                        if (coff < 1.0f && coff > -1.0f) {
+                            std::cout << parameters[i].name << ',';
+                            std::cout << parameters[j].name << ',';
+                            std::cout << coff;
+                            std::cout << std::endl;
+                        }
+
+                    }
+
+//                    count++;
+                }
+            }
+        }
+    }
+
+    double corr(const std::vector<float> &a, const std::vector<float> &b, size_t n) {
+        double sumA = 0.0f, sumB = 0.0f, sumAB = 0.0f;
+        double sumA2 = 0.0f, sumB2 = 0.0f;
+        double sumAmB = 0.0f;
+
+        for (size_t i = 0; i < n; i++) {
+            // sum of elements of array X.
+            sumA = sumA + a[i];
+
+            // sum of elements of array Y.
+            sumB = sumB + b[i];
+
+            sumAmB = sumAmB + (a[i] - b[i]);
+
+            // sum of X[i] * Y[i].
+            sumAB = sumAB + a[i] * b[i];
+
+            // sum of square of array elements.
+            sumA2 = sumA2 + a[i] * a[i];
+            sumB2 = sumB2 + b[i] * b[i];
+        }
+//        double mA = parameters[a].m;
+//        double mB = parameters[b].m;
+//        double sA = std::sqrt(parameters[a].sm2);
+//        double sB = std::sqrt(parameters[b].sm2);
+//
+//        double sumA = 0.0f;
+//        double sumB = 0.0f;
+//
+//        const auto vecA = filedump[a];
+//        const auto vecB = filedump[b];
+//
+//        for (size_t i = 0; i < n; i++) {
+//            sumA += (vecA[i] - mA);
+//            sumB += (vecB[i] - mB);
+//        }
+
+//        std::cout << std::endl;
+
+//        double corr = (sumA*sumB) / n/sA/sB;
+
+        return  (n*sumAB - sumA*sumB) / std::sqrt( (n*sumA2 - sumA*sumA ) * (n*sumB2 - sumB*sumB) );
     }
 
     void load()
@@ -507,7 +576,7 @@ public:
     void print(const std::string& filename) {
         std::ofstream f;
         f.open(filename.c_str());
-        
+
         f << "Parameter" << ',';
         f << "Unit" << ',';
         f << "LSL" << ',';

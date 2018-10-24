@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.5)
 project(MsaCalc)
 
 set(CMAKE_CXX_STANDARD 14)
@@ -19,7 +19,7 @@ if(CMAKE_BUILD_TYPE STREQUAL Debug)
 endif(CMAKE_BUILD_TYPE STREQUAL Debug)
 
 if(CMAKE_BUILD_TYPE STREQUAL Release)
-    target_compile_options(MsaCalc PRIVATE -g -O3 -Wall -fopenmp)
+    target_compile_options(MsaCalc PRIVATE -g -O3 -Wall -fopenmp -march=native)
 endif(CMAKE_BUILD_TYPE STREQUAL Release)
 
 
