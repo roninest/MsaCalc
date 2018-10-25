@@ -42,6 +42,15 @@ struct Parameter
     double dsm2 = 0.0f;
 };
 
+struct Cell
+{
+    size_t a;
+    size_t b;
+    double chiA;
+    double chiB;
+    double r;
+};
+
 
 class MsaCalc
 {
@@ -322,7 +331,6 @@ public:
 
 
     void plot() {
-//        omp_set_num_threads(4);
         #pragma omp parallel for
         for (size_t i = 0; i < parameters.size(); i++) {
             if (parameters[i].n > 3) {
@@ -341,33 +349,37 @@ public:
     }
 
     void corr() {
-        long count = 0;
+        if (!correlation.empty()) {
+            correlation.clear();
+        }
 
-        for (size_t i = 0; i < parameters.size(); i++)  {
+        const size_t n = parameters.size();
 
-            for (size_t j = 0; j < parameters.size(); j++) {
-                if (i > j) {
+        correlation.reserve(( (n/2) * (n-1)/2) );
+
+//        float chiA = std::c filedump[i]
+
+        #pragma omp parallel for
+        for (size_t i = 0; i < n; i++)  {
+            #pragma omp parallel for
+            for (size_t j = 0; j < i; j++) {
                     if (filedump[i].size() > 10000 && filedump[j].size() > 10000) {
                         double coff = corr(filedump[i], filedump[j], 10000);
-                        if (coff < 1.0f && coff > -1.0f) {
-                            std::cout << parameters[i].name << ',';
-                            std::cout << parameters[j].name << ',';
-                            std::cout << coff;
-                            std::cout << std::endl;
+                        if (coff) {
+                            correlation.push_back({i, i, 0.0f, 0.0f, coff});
                         }
-
-                    }
-
-//                    count++;
                 }
             }
         }
     }
 
+
     double corr(const std::vector<float> &a, const std::vector<float> &b, size_t n) {
+//        std::sort(a.begin(), a.end());
+//        std::sort(b.begin(), b.end());
+
         double sumA = 0.0f, sumB = 0.0f, sumAB = 0.0f;
         double sumA2 = 0.0f, sumB2 = 0.0f;
-        double sumAmB = 0.0f;
 
         for (size_t i = 0; i < n; i++) {
             // sum of elements of array X.
@@ -376,7 +388,7 @@ public:
             // sum of elements of array Y.
             sumB = sumB + b[i];
 
-            sumAmB = sumAmB + (a[i] - b[i]);
+//            sumAmB = sumAmB + (a[i] - b[i]);
 
             // sum of X[i] * Y[i].
             sumAB = sumAB + a[i] * b[i];
@@ -385,28 +397,12 @@ public:
             sumA2 = sumA2 + a[i] * a[i];
             sumB2 = sumB2 + b[i] * b[i];
         }
-//        double mA = parameters[a].m;
-//        double mB = parameters[b].m;
-//        double sA = std::sqrt(parameters[a].sm2);
-//        double sB = std::sqrt(parameters[b].sm2);
-//
-//        double sumA = 0.0f;
-//        double sumB = 0.0f;
-//
-//        const auto vecA = filedump[a];
-//        const auto vecB = filedump[b];
-//
-//        for (size_t i = 0; i < n; i++) {
-//            sumA += (vecA[i] - mA);
-//            sumB += (vecB[i] - mB);
-//        }
 
-//        std::cout << std::endl;
+        const double result = (n*sumAB - sumA*sumB) / std::sqrt( (n*sumA2 - sumA*sumA ) * (n*sumB2 - sumB*sumB) );
 
-//        double corr = (sumA*sumB) / n/sA/sB;
-
-        return  (n*sumAB - sumA*sumB) / std::sqrt( (n*sumA2 - sumA*sumA ) * (n*sumB2 - sumB*sumB) );
+        return (abs(result) < 1.0f && abs(result) > 0.6f) ? result : 0.0f;
     }
+
 
     void load()
     {
@@ -415,15 +411,13 @@ public:
             return;
         }
 
-//        omp_set_num_threads(4);
-//        #pragma omp parallel for
+
         for (size_t i = 0; i < parameters.size(); i++) {
             size_t n = 0u;
             double m = parameters[i].m;
             double m2 = parameters[i].m2;
             double sm2 = parameters[i].sm2;
-//            omp_set_num_threads(4);
-//            #pragma omp parallel for
+
             for (const auto &it : filedump[i]) {
                 double x = it;
                 m = (x + n*m)/(n + 1);
@@ -436,6 +430,7 @@ public:
             parameters[i].sm2 = sm2;
         }
     }
+
 
     void load(const std::string &filename)
     {
@@ -536,6 +531,7 @@ public:
             }
         }
 
+
         while (getline(f, line)) {
             std::stringstream ss(line);
             curr = 0;
@@ -573,7 +569,76 @@ public:
 
     }
 
-    void print(const std::string& filename) {
+    void printCorr(const std::string &filename) {
+        std::ofstream f;
+        f.open(filename.c_str());
+
+        f << "ParameterA" << ',';
+        f << "MA" << ',';
+        f << "sA" << ',';
+        f << "ParameterB" << ',';
+        f << "MB" << ',';
+        f << "sB" << ',';
+        f << "R" << ',';
+        f << std::endl;
+
+#ifdef DEBUG
+        std::cout << "ParameterA" << "    ";
+        std::cout << "MA" << "    ";
+        std::cout << "sA" << "    ";
+        std::cout << "ParameterB" << "    ";
+        std::cout << "MB" << "    ";
+        std::cout << "sB" << "    ";
+        std::cout << "R" << "    ";
+        std::cout << std::endl;
+
+#endif
+
+        std::sort(correlation.begin(), correlation.end(),
+            [](const auto &x, const auto &y) {return std::abs(y.r) < std::abs(x.r);});
+
+        for (const auto &i : correlation) {
+            size_t a = i.a;
+            size_t b = i.b;
+            float r = i.r;
+            float chiA = i.chiA;
+            float chiB = i.chiB;
+//            size_t a = std::get<0>(i);
+//            size_t b = std::get<1>(i);
+//            float r = std::get<2>(i);
+
+
+            f << parameters[a].name << ',';
+            f << parameters[a].m << ',';
+            f << std::sqrt(parameters[a].sm2) << ',';
+            f << parameters[b].name << ',';
+            f << parameters[b].m << ',';
+            f << std::sqrt(parameters[b].sm2) << ',';
+            f << r;
+            f << '\n';
+
+#ifdef DEBUG
+            std::cout << parameters[a].name << "    ";
+            std::cout << parameters[a].m << "    ";
+            std::cout << std::sqrt(parameters[a].sm2) << "    ";
+            std::cout << parameters[b].name << "    ";
+            std::cout << parameters[b].m << "    ";
+            std::cout << std::sqrt(parameters[b].sm2) << "    ";
+            std::cout << r;
+            std::cout << '\n';
+
+#endif
+        }
+
+        f << std::flush;
+
+        if (f.is_open()) {
+            f.close();
+        }
+
+    }
+
+    void printMSA(const std::string &filename) {
         std::ofstream f;
         f.open(filename.c_str());
 
@@ -607,6 +672,9 @@ public:
         double m;
         double lsl;
         double usl;
+        double ppkl;
+        double ppkh;
+        double ppk;
 
         if (method == Method::CUMULATIVE) {
             for (const auto &i : parameters) {
@@ -614,9 +682,9 @@ public:
                 m = i.m;
                 lsl = i.lsl;
                 usl = i.usl;
-                double ppkl = (m - lsl) / 3 / sm;
-                double ppkh = (usl - m) / 3 / sm;
-                double ppk = std::min(ppkl, ppkh);
+                ppkl = (m - lsl) / 3 / sm;
+                ppkh = (usl - m) / 3 / sm;
+                ppk = std::min(ppkl, ppkh);
                 f << i.name << ',';
                 f << i.unit << ',';
                 f << i.lsl << ',';
@@ -650,9 +718,9 @@ public:
                 sm = std::sqrt(i.dsm2/i.n);
                 lsl = i.lsl;
                 usl = i.usl;
-                double ppkl = (m - lsl) / 3 / sm;
-                double ppkh = (usl - m) / 3 / sm;
-                double ppk = std::min(ppkl, ppkh);
+                ppkl = (m - lsl) / 3 / sm;
+                ppkh = (usl - m) / 3 / sm;
+                ppk = std::min(ppkl, ppkh);
                 f << i.name << ',';
                 f << i.unit << ',';
                 f << i.lsl << ',';
@@ -746,8 +814,10 @@ public:
 
 protected:
     std::vector<Parameter> parameters;
-    std::vector<std::vector<float>>filedump;
+    std::vector<std::vector<float>> filedump;
+//    std::vector<std::tuple<size_t, size_t, float, float>> correlation;
     Method method = Method::CUMULATIVE;
+    std::vector<Cell> correlation;
 };
 
 }
