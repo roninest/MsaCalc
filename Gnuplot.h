@@ -92,10 +92,15 @@ public:
     template<class X>
     void sendRAM(const std::vector<X> &arg)
     {
-        for (const auto &it : arg) {
-//            if (it < 1000 && it > -1000) {
+        if (arg.size() < 10000) {
+            for (const auto &it : arg) {
                 this->send(std::to_string(it));
-//            }
+            }
+        }
+        else {
+            for (auto it = arg.begin(); it != arg.begin() + 10000; ++it) {
+                this->send(std::to_string(*it));
+            }
         }
     }
 

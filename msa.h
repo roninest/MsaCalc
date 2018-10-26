@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <omp.h>
+#include <algorithm>
 #ifdef DEBUG
 #include <chrono>
 #endif
@@ -39,6 +40,7 @@ struct Parameter
     double sm2 = 0.0f;
     double sum = 0.0f;
     double dsm2 = 0.0f;
+    double ks = -1.0f;
     size_t n = 0u;
 
     bool operator<(const Parameter &that)
@@ -51,6 +53,7 @@ struct Parameter
 struct Cell
 {
     double r = 0.0f;
+//    double ks = 0.0f;
     size_t a = 0u;
     size_t b = 0u;
 
@@ -348,12 +351,9 @@ public:
                 gp.send("set terminal png");
                 std::string cmd = std::string("set output '") +  parameters[i].name + ".png'";
                 gp.send(cmd);
-//                gp.send("set grid");
-                gp.send("plot '-' smooth frequency with dots"); //with dots
+                gp.send("set grid");
+                gp.send("plot '-' smooth frequency with boxes"); //with dots
                 gp.plot(filedump[i]);
-            }
-            else {
-                //No sense to plot empty data
             }
         }
     }
@@ -374,6 +374,18 @@ public:
                     if (filedump[i].size() > 10000 && filedump[j].size() > 10000) {
                         double coff = corr(filedump[i], filedump[j], 10000);
                         if (coff) {
+                            double m = parameters[i].m;
+                            double s = std::sqrt(parameters[i].sm2);
+                            if (parameters[i].ks == -1.0f) {
+                                parameters[i].ks = ks(filedump[i], m, s);
+                            }
+                            m = parameters[j].m;
+                            s = std::sqrt(parameters[j].sm2);
+
+                            if (parameters[j].ks == -1.0f) {
+                                parameters[j].ks = ks(filedump[j], m, s);
+                            }
+
                             correlation.push_back({coff, i, j});
                         }
                 }
@@ -598,9 +610,11 @@ public:
         f << "ParameterA" << ',';
         f << "MA" << ',';
         f << "sA" << ',';
+        f << "KS" << ',',
         f << "ParameterB" << ',';
         f << "MB" << ',';
         f << "sB" << ',';
+        f << "KS" << ',';
         f << "R" << ',';
         f << std::endl;
 
@@ -621,20 +635,18 @@ public:
         for (const auto &i : correlation) {
             size_t a = i.a;
             size_t b = i.b;
-            float r = i.r;
-//            float chiA = i.chiA;
-//            float chiB = i.chiB;
-//            size_t a = std::get<0>(i);
-//            size_t b = std::get<1>(i);
-//            float r = std::get<2>(i);
+            double r = i.r;
+            Parameter &parA = parameters[a];
+            Parameter &parB = parameters[b];
 
-
-            f << parameters[a].name << ',';
-            f << parameters[a].m << ',';
-            f << std::sqrt(parameters[a].sm2) << ',';
-            f << parameters[b].name << ',';
-            f << parameters[b].m << ',';
-            f << std::sqrt(parameters[b].sm2) << ',';
+            f << parA.name << ',';
+            f << parA.m << ',';
+            f << std::sqrt(parA.sm2) << ',';
+            f << parA.ks << ',';
+            f << parB.name << ',';
+            f << parB.m << ',';
+            f << std::sqrt(parB.sm2) << ',';
+            f << parB.ks << ',';
             f << r;
             f << '\n';
 
@@ -832,29 +844,49 @@ public:
         return true;
     }
 
-
-    static double phi(double x)
+    double ks(std::vector<float> &v, double m, double s) const noexcept
     {
-        // constants
-        constexpr double a1 =  0.254829592;
-        constexpr double a2 = -0.284496736;
-        constexpr double a3 =  1.421413741;
-        constexpr double a4 = -1.453152027;
-        constexpr double a5 =  1.061405429;
-        constexpr double p  =  0.3275911;
+        std::sort(v.begin(), v.end());
+        const size_t N = v.size();
+        double Dn = 0.0f;
 
-        // Save the sign of x
-        int sign = 1;
-        if (x < 0) {
-            sign = -1;
+//        double m =
+
+        for (size_t i = 1; i < N; i++) {
+            double d = std::abs( phi(v[i], m, s) - static_cast<double>(i)/static_cast<double>(N) );
+//            std::cout << phi(v[i], m, s) << ' ' << i << ' ' << N << ' ' << double(i)/double(N) <<  ' ' << m << ' ' << s << '\n';
+            if (Dn < d) {
+                Dn = d;
+            }
         }
-        x = abs(x)/M_SQRT2;
 
-        // A&S formula 7.1.26
-        double t = 1.0/(1.0 + p*x);
-        double y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*exp(-x*x);
+        return Dn;
+    }
 
-        return 0.5*(1.0 + sign*y);
+
+    double phi(double x,  double m, double s) const noexcept
+    {
+//        // constants
+//        constexpr double a1 =  0.254829592;
+//        constexpr double a2 = -0.284496736;
+//        constexpr double a3 =  1.421413741;
+//        constexpr double a4 = -1.453152027;
+//        constexpr double a5 =  1.061405429;
+//        constexpr double p  =  0.3275911;
+//
+//        // Save the sign of x
+//        int sign = 1;
+//        if (x < 0) {
+//            sign = -1;
+//        }
+//        x = abs(x)/M_SQRT2;
+//
+//        // A&S formula 7.1.26
+//        double t = 1.0/(1.0 + p*x);
+//        double y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*exp(-x*x);
+//
+//        return 0.5*(1.0 + sign*y);
+        return 0.5  + 0.5 * std::erf( (x - m)/s/M_SQRT2 );
     }
 
 

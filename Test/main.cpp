@@ -1,4 +1,3 @@
-//#include "csv.h"
 #include "../msa.h"
 #include "../Gnuplot.h"
 
@@ -17,6 +16,4 @@ int main() {
     calc.printCorr("correlation.csv");
     calc.printMSA("msa.csv");
 //    calc.plot();
-
-    return 0;
 }
