@@ -30,7 +30,6 @@ enum class Method {
 
 struct Parameter
 {
-    size_t n = 0u;
     std::string name = "";
     std::string unit = "";
     double lsl = 0.0f;
@@ -40,15 +39,26 @@ struct Parameter
     double sm2 = 0.0f;
     double sum = 0.0f;
     double dsm2 = 0.0f;
+    size_t n = 0u;
+
+    bool operator<(const Parameter &that)
+    {
+        return this->name < that.name;
+    }
 };
+
 
 struct Cell
 {
-    size_t a;
-    size_t b;
-    double chiA;
-    double chiB;
-    double r;
+    double r = 0.0f;
+    size_t a = 0u;
+    size_t b = 0u;
+
+
+    bool operator<(const Cell &that)
+    {
+        return std::abs(this->r) > std::abs(that.r);
+    }
 };
 
 
@@ -357,8 +367,6 @@ public:
 
         correlation.reserve(( (n/2) * (n-1)/2) );
 
-//        float chiA = std::c filedump[i]
-
         #pragma omp parallel for
         for (size_t i = 0; i < n; i++)  {
             #pragma omp parallel for
@@ -366,7 +374,7 @@ public:
                     if (filedump[i].size() > 10000 && filedump[j].size() > 10000) {
                         double coff = corr(filedump[i], filedump[j], 10000);
                         if (coff) {
-                            correlation.push_back({i, i, 0.0f, 0.0f, coff});
+                            correlation.push_back({coff, i, j});
                         }
                 }
             }
@@ -375,9 +383,6 @@ public:
 
 
     double corr(const std::vector<float> &a, const std::vector<float> &b, size_t n) {
-//        std::sort(a.begin(), a.end());
-//        std::sort(b.begin(), b.end());
-
         double sumA = 0.0f, sumB = 0.0f, sumAB = 0.0f;
         double sumA2 = 0.0f, sumB2 = 0.0f;
 
@@ -400,7 +405,7 @@ public:
 
         const double result = (n*sumAB - sumA*sumB) / std::sqrt( (n*sumA2 - sumA*sumA ) * (n*sumB2 - sumB*sumB) );
 
-        return (abs(result) < 1.0f && abs(result) > 0.6f) ? result : 0.0f;
+        return (abs(result) < 1.0f && abs(result) > 0.8f) ? result : 0.0f;
     }
 
 
@@ -414,20 +419,37 @@ public:
 
         for (size_t i = 0; i < parameters.size(); i++) {
             size_t n = 0u;
-            double m = parameters[i].m;
-            double m2 = parameters[i].m2;
-            double sm2 = parameters[i].sm2;
+            Parameter &param = parameters[i];
 
-            for (const auto &it : filedump[i]) {
-                double x = it;
-                m = (x + n*m)/(n + 1);
-                m2 = (x*x + n*m2)/(n + 1);
-                sm2 = m2 - m*m;
-                n++;
+            double m = param.m;
+            double m2 = param.m2;
+            double sm2 = param.sm2;
+
+            if (filedump[i].size() < 10000u){
+                for (const auto &it : filedump[i]) {
+                    double x = it;
+                    m = (x + n*m)/(n + 1);
+                    m2 = (x*x + n*m2)/(n + 1);
+                    sm2 = m2 - m*m;
+                    n++;
+
+                }
             }
-            parameters[i].m = m;
-            parameters[i].m2 = m2;
-            parameters[i].sm2 = sm2;
+            else {
+                for (auto it = filedump[i].begin(); it != filedump[i].begin() + 10000u; ++it) {
+                    double x = *it;
+                    m = (x + n*m)/(n + 1);
+                    m2 = (x*x + n*m2)/(n + 1);
+                    sm2 = m2 - m*m;
+                    n++;
+                }
+
+            }
+
+
+            param.m = m;
+            param.m2 = m2;
+            param.sm2 = sm2;
         }
     }
 
@@ -594,15 +616,14 @@ public:
 
 #endif
 
-        std::sort(correlation.begin(), correlation.end(),
-            [](const auto &x, const auto &y) {return std::abs(y.r) < std::abs(x.r);});
+        std::sort(correlation.begin(), correlation.end());
 
         for (const auto &i : correlation) {
             size_t a = i.a;
             size_t b = i.b;
             float r = i.r;
-            float chiA = i.chiA;
-            float chiB = i.chiB;
+//            float chiA = i.chiA;
+//            float chiB = i.chiB;
 //            size_t a = std::get<0>(i);
 //            size_t b = std::get<1>(i);
 //            float r = std::get<2>(i);
@@ -815,9 +836,8 @@ public:
 protected:
     std::vector<Parameter> parameters;
     std::vector<std::vector<float>> filedump;
-//    std::vector<std::tuple<size_t, size_t, float, float>> correlation;
-    Method method = Method::CUMULATIVE;
     std::vector<Cell> correlation;
+    Method method = Method::CUMULATIVE;
 };
 
 }
