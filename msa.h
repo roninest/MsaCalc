@@ -53,7 +53,6 @@ struct Parameter
 struct Cell
 {
     double r = 0.0f;
-//    double ks = 0.0f;
     size_t a = 0u;
     size_t b = 0u;
 
@@ -398,6 +397,7 @@ public:
         double sumA = 0.0f, sumB = 0.0f, sumAB = 0.0f;
         double sumA2 = 0.0f, sumB2 = 0.0f;
 
+        #pragma omp parallel for
         for (size_t i = 0; i < n; i++) {
             // sum of elements of array X.
             sumA = sumA + a[i];
@@ -844,17 +844,30 @@ public:
         return true;
     }
 
-    double ks(std::vector<float> &v, double m, double s) const noexcept
+    static double ks(std::vector<float> &v, double m, double s)
     {
         std::sort(v.begin(), v.end());
         const size_t N = v.size();
         double Dn = 0.0f;
 
-//        double m =
+        for (size_t i = 1; i < N; i++) {
+            double d = std::abs( phi(v[i], m, s) - static_cast<double>(i)/static_cast<double>(N) );
+            if (Dn < d) {
+                Dn = d;
+            }
+        }
+
+        return Dn;
+    }
+
+    static double ks(std::vector<double> &v, double m, double s)
+    {
+        std::sort(v.begin(), v.end());
+        const size_t N = v.size();
+        double Dn = 0.0f;
 
         for (size_t i = 1; i < N; i++) {
             double d = std::abs( phi(v[i], m, s) - static_cast<double>(i)/static_cast<double>(N) );
-//            std::cout << phi(v[i], m, s) << ' ' << i << ' ' << N << ' ' << double(i)/double(N) <<  ' ' << m << ' ' << s << '\n';
             if (Dn < d) {
                 Dn = d;
             }
@@ -864,31 +877,33 @@ public:
     }
 
 
-    double phi(double x,  double m, double s) const noexcept
-    {
-//        // constants
-//        constexpr double a1 =  0.254829592;
-//        constexpr double a2 = -0.284496736;
-//        constexpr double a3 =  1.421413741;
-//        constexpr double a4 = -1.453152027;
-//        constexpr double a5 =  1.061405429;
-//        constexpr double p  =  0.3275911;
-//
-//        // Save the sign of x
-//        int sign = 1;
-//        if (x < 0) {
-//            sign = -1;
-//        }
-//        x = abs(x)/M_SQRT2;
-//
-//        // A&S formula 7.1.26
-//        double t = 1.0/(1.0 + p*x);
-//        double y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*exp(-x*x);
-//
-//        return 0.5*(1.0 + sign*y);
-        return 0.5  + 0.5 * std::erf( (x - m)/s/M_SQRT2 );
-    }
+//https://www.johndcook.com/blog/cpp_phi/
+//The function Φ(x) is the cumulative density function (CDF) of a standard normal (Gaussian) random variable.
 
+    static double phi(double x,  double m, double s)
+    {
+        // constants
+        constexpr double a1 =  0.254829592;
+        constexpr double a2 = -0.284496736;
+        constexpr double a3 =  1.421413741;
+        constexpr double a4 = -1.453152027;
+        constexpr double a5 =  1.061405429;
+        constexpr double p  =  0.3275911;
+
+        // Save the sign of x
+        x = (x - m)/s/M_SQRT2;
+        int sign = 1;
+        if (x < 0) {
+            sign = -1;
+        }
+        x = abs(x)/M_SQRT2;
+
+        // A&S formula 7.1.26
+        double t = 1.0/(1.0 + p*x);
+        double y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*exp(-x*x);
+
+        return 0.5*(1.0 + sign*y);
+    }
 
 
 protected:
