@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(OpenMP REQUIRED)
 
-add_executable(MsaCalc Test/main.cpp msa.h Gnuplot.h)
+add_executable(MsaCalc Test/test.cpp msa.h Gnuplot.h)
 #target_compile_options(MsaCalc PRIVATE -g -O3 -Wall -fopenmp)
 target_link_libraries(MsaCalc PRIVATE ${OpenMP_CXX_FLAGS})
 
