@@ -875,21 +875,50 @@ public:
 
 //Setters
 public:
-    void setMethod(Method method)
+    void clear()
     {
-        this->method = method;
+        parameters.clear();
+        matrix.clear();
     }
 
-    Method getMethod()
+    const std::vector<Parameter> &getParameters() const
+    {
+        return parameters;
+    }
+
+    void setParameters(const std::vector<Parameter> &parameters)
+    {
+        MsaCalc::parameters = parameters;
+    }
+    const std::vector<Cell> &getMatrix() const
+    {
+        return matrix;
+    }
+
+    void setMatrix(const std::vector<Cell> &matrix)
+    {
+        MsaCalc::matrix = matrix;
+    }
+
+    Method getMethod() const
     {
         return method;
     }
 
-    void clear()
+    void setMethod(Method method)
     {
-        filedump.clear();
+        MsaCalc::method = method;
     }
 
+    size_t getNMAXLIMIT() const
+    {
+        return NMAXLIMIT;
+    }
+
+    void setNMAXLIMIT(size_t NMAXLIMIT)
+    {
+        MsaCalc::NMAXLIMIT = NMAXLIMIT;
+    }
 
 public:
     static bool is_float(const std::string &s)
