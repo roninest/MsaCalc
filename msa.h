@@ -974,22 +974,7 @@ public:
 
         return Dn;
     }
-
-    static double ks(std::vector<double> &v, double m, double s)
-    {
-        std::sort(v.begin(), v.end());
-        const size_t N = v.size();
-        double Dn = 0.0f;
-
-        for (size_t i = 1; i < N; i++) {
-            double d = std::abs( phi(v[i], m, s) - static_cast<double>(i)/static_cast<double>(N) );
-            if (Dn < d) {
-                Dn = d;
-            }
-        }
-
-        return Dn;
-    }
+    
 
 
 //https://www.johndcook.com/blog/cpp_phi/
