@@ -13,11 +13,15 @@
 #include <array>
 #include <cmath>
 #include <string>
-#include <thread>
-#include <omp.h>
+
 #include <algorithm>
 #ifdef DEBUG
 #include <chrono>
+#endif
+
+
+#ifdef ENABLE_PARALEL
+    #include <omp.h>
 #endif
 
 namespace  msa
@@ -31,19 +35,22 @@ enum class Method {
 
 struct Parameter
 {
-    std::string name = "";
-    std::string unit = "";
+    std::string name;
+    std::string unit;
     double lsl = 0.0f;
     double usl = 0.0f;
     double m = 0.0f;
     double m2 = 0.0f;
     double sm2 = 0.0f;
+#ifdef ENABLE_DIRECT
     double sum = 0.0f;
     double dsm2 = 0.0f;
+#endif
     double ks = -1.0f;
     size_t n = 0u;
+    std::vector<float> data;
 
-    bool operator<(const Parameter &that)
+    bool operator<(const Parameter &that) const
     {
         return this->name < that.name;
     }
@@ -56,8 +63,11 @@ struct Cell
     size_t a = 0u;
     size_t b = 0u;
 
+    Cell(double r, size_t a, size_t b)
+        : r(r), a(a), b(b)
+    {}
 
-    bool operator<(const Cell &that)
+    bool operator<(const Cell &that) const
     {
         return std::abs(this->r) > std::abs(that.r);
     }
@@ -219,7 +229,6 @@ public:
         }
 
         return columns;
-
     }
 
 
@@ -232,6 +241,7 @@ public:
         size_t row = 0;
         size_t total = 0;
         size_t columns = fillSpec(filename);
+        size_t rows = 0;
 
         f.open(filename);
         if (!f.is_open()) {
@@ -257,29 +267,53 @@ public:
                     ignore = true;
                     continue;
                 }
+                else if (curr == 19 && s != "1") {
+                    curr++;
+                    ignore = true;
+                    continue;
+                }
 
                 if (!is_float(s)) {
                     curr++;
                     continue;
                 }
 
+                auto &currPar = parameters[curr];
+                size_t n = currPar.n;
+                double m = currPar.m;
+                double m2 = currPar.m2;
+                double x = stod(s);
+                currPar.m = (x + n*m)/(n + 1);
+                currPar.m2 = (x*x + n*m2)/(n + 1);
+                currPar.sm2 = m2 - m*m;
+                currPar.n++;
+#ifdef ENABLE_DIRECT
+                if(method == Method::DIRECT) {
+                    currPar.sum += x;
+                }
+#endif
+
+
                 parameters[curr].n++;
                 curr++;
                 total++;
             }
+            rows++;
         }
 
         if (f.is_open()) {
             f.close();
         }
 
-        if (!filedump.empty()) {
-            filedump.clear();
-        }
 
-        filedump.resize(parameters.size());
-        for (size_t i = 0; i < parameters.size(); i++) {
-            filedump[i].reserve(parameters[i].n);
+        for (auto &it : parameters) {
+            auto &dump = it.data;
+            if (!dump.empty()) {
+                dump.clear();
+            }
+
+//            dump.reserve(it.n);
+            dump.reserve(rows);
         }
 
         f.open(filename);
@@ -317,13 +351,19 @@ public:
                     ignore = true;
                     continue;
                 }
+                else if (curr == 19 && s != "1") {
+                    curr++;
+                    ignore = true;
+                    continue;
+                }
+
 
                 if (!is_float(s)) {
                     curr++;
                     continue;
                 }
 
-                filedump[curr].push_back(stof(s));
+                parameters[curr].data.push_back(stof(s));
                 curr++;
             }
 
@@ -342,62 +382,91 @@ public:
     }
 
 
-    void plot() {
+    void plot()
+    {
+        #ifdef ENABLE_PARALEL
         #pragma omp parallel for
+        #endif
         for (size_t i = 0; i < parameters.size(); i++) {
-            if (parameters[i].n > 3) {
+            const auto &data = parameters[i].data;
+            if (data.size() > 1) {
                 Gnuplot gp;
                 gp.send("set terminal png");
                 std::string cmd = std::string("set output '") +  parameters[i].name + ".png'";
                 gp.send(cmd);
                 gp.send("set grid");
-                gp.send("plot '-' smooth frequency with boxes"); //with dots
-                gp.plot(filedump[i]);
+                gp.send("plot '-' smooth frequency with boxes"); //smooth frequency with boxes
+                gp.plot(parameters[i].data);
             }
         }
     }
 
-    void corr() {
-        if (!correlation.empty()) {
-            correlation.clear();
+    void correlation()
+    {
+        if (!matrix.empty()) {
+            matrix.clear();
         }
 
-        const size_t n = parameters.size();
+        const size_t N = parameters.size();
 
-        correlation.reserve(( (n/2) * (n-1)/2) );
+        matrix.reserve(( (N/2) * (N-1)/2) );
 
+        #ifdef ENABLE_PARALEL
         #pragma omp parallel for
-        for (size_t i = 0; i < n; i++)  {
-            #pragma omp parallel for
+        #endif
+        for (size_t i = 0; i < N; i++)  {
             for (size_t j = 0; j < i; j++) {
-                    if (filedump[i].size() > 10000 && filedump[j].size() > 10000) {
-                        double coff = corr(filedump[i], filedump[j], 10000);
-                        if (coff) {
-                            double m = parameters[i].m;
-                            double s = std::sqrt(parameters[i].sm2);
-                            if (parameters[i].ks == -1.0f) {
-                                parameters[i].ks = ks(filedump[i], m, s);
-                            }
-                            m = parameters[j].m;
-                            s = std::sqrt(parameters[j].sm2);
 
-                            if (parameters[j].ks == -1.0f) {
-                                parameters[j].ks = ks(filedump[j], m, s);
-                            }
+                fillCell(i, j);
 
-                            correlation.push_back({coff, i, j});
-                        }
-                }
             }
         }
     }
 
 
-    double corr(const std::vector<float> &a, const std::vector<float> &b, size_t n) {
+    void fillCell(const size_t i, const size_t j)
+    {
+        auto &paramA = parameters[i];
+        auto &paramB = parameters[j];
+        auto &dataA = parameters[i].data;
+        auto &dataB = parameters[j].data;
+
+
+        double coff = pearson(dataA, dataB, NMAXLIMIT);
+
+        if (coff) {
+            double m = paramA.m;
+            double s = std::sqrt(paramA.sm2);
+            if (paramA.ks == -1.0f) {
+                paramA.ks = kolmogorov(dataA, m, s);
+            }
+
+            m = paramB.m;
+            s = std::sqrt(paramB.sm2);
+            if (paramB.ks == -1.0f) {
+                paramB.ks = kolmogorov(dataB, m, s);
+            }
+
+            matrix.emplace_back(coff, i, j);
+        }
+    }
+
+
+    double pearson(const std::vector<float> &a, const std::vector<float> &b, size_t n)
+    {
+        if (a.size() < n || b.size() < n) {
+            return 0.0f;
+        }
+        if (a.size() != b.size()) {
+            return 0.0f;
+        }
+
         double sumA = 0.0f, sumB = 0.0f, sumAB = 0.0f;
         double sumA2 = 0.0f, sumB2 = 0.0f;
 
+        #ifdef ENABLE_PARALEL
         #pragma omp parallel for
+        #endif
         for (size_t i = 0; i < n; i++) {
             // sum of elements of array X.
             sumA = sumA + a[i];
@@ -423,12 +492,14 @@ public:
 
     void load()
     {
-        if (filedump.empty()) {
+        if (parameters.empty()) {
             std::cerr << "Data is empty" << std::endl;
             return;
         }
 
-
+        #ifdef ENABLE_PARALEL
+        #pragma omp parallel for
+        #endif
         for (size_t i = 0; i < parameters.size(); i++) {
             size_t n = 0u;
             Parameter &param = parameters[i];
@@ -437,8 +508,8 @@ public:
             double m2 = param.m2;
             double sm2 = param.sm2;
 
-            if (filedump[i].size() < 10000u){
-                for (const auto &it : filedump[i]) {
+            if (param.data.size() < NMAXLIMIT){
+                for (const auto &it : param.data) {
                     double x = it;
                     m = (x + n*m)/(n + 1);
                     m2 = (x*x + n*m2)/(n + 1);
@@ -448,7 +519,7 @@ public:
                 }
             }
             else {
-                for (auto it = filedump[i].begin(); it != filedump[i].begin() + 10000u; ++it) {
+                for (auto it = param.data.begin(); it != param.data.begin() + NMAXLIMIT; ++it) {
                     double x = *it;
                     m = (x + n*m)/(n + 1);
                     m2 = (x*x + n*m2)/(n + 1);
@@ -514,17 +585,20 @@ public:
                     continue;
                 }
 
-                size_t n = parameters[curr].n;
-                double m = parameters[curr].m;
-                double m2 = parameters[curr].m2;
+                auto &currPar = parameters[curr]; 
+                size_t n = currPar.n;
+                double m = currPar.m;
+                double m2 = currPar.m2;
                 double x = stod(s);
-                parameters[curr].m = (x + n*m)/(n + 1);
-                parameters[curr].m2 = (x*x + n*m2)/(n + 1);
-                parameters[curr].sm2 = m2 - m*m;
-                parameters[curr].n++;
+                currPar.m = (x + n*m)/(n + 1);
+                currPar.m2 = (x*x + n*m2)/(n + 1);
+                currPar.sm2 = m2 - m*m;
+                currPar.n++;
+#ifdef ENABLE_DIRECT
                 if(method == Method::DIRECT) {
-                    parameters[curr].sum += x;
+                    currPar.sum += x;
                 }
+#endif
                 curr++;
             }
 
@@ -542,13 +616,17 @@ public:
         }
 
         //Calculate sigma without error
+#ifdef ENABLE_DIRECT
         if (method == Method::DIRECT) {
             direct(filename);
         }
+#endif
     }
 
+#ifdef ENABLE_DIRECT
     void direct(const std::string &filename)
     {
+
         std::string line, s;
         std::ifstream f;
         size_t curr = 0;
@@ -601,7 +679,9 @@ public:
             f.close();
         }
 
+
     }
+#endif
 
     void printCorr(const std::string &filename) {
         std::ofstream f;
@@ -622,17 +702,19 @@ public:
         std::cout << "ParameterA" << "    ";
         std::cout << "MA" << "    ";
         std::cout << "sA" << "    ";
+        std::cout << "KS" << "    ",
         std::cout << "ParameterB" << "    ";
         std::cout << "MB" << "    ";
         std::cout << "sB" << "    ";
+        std::cout << "KS" << "    ";
         std::cout << "R" << "    ";
         std::cout << std::endl;
 
 #endif
 
-        std::sort(correlation.begin(), correlation.end());
+        std::sort(matrix.begin(), matrix.end());
 
-        for (const auto &i : correlation) {
+        for (const auto &i : matrix) {
             size_t a = i.a;
             size_t b = i.b;
             double r = i.r;
@@ -651,12 +733,14 @@ public:
             f << '\n';
 
 #ifdef DEBUG
-            std::cout << parameters[a].name << "    ";
-            std::cout << parameters[a].m << "    ";
-            std::cout << std::sqrt(parameters[a].sm2) << "    ";
-            std::cout << parameters[b].name << "    ";
-            std::cout << parameters[b].m << "    ";
-            std::cout << std::sqrt(parameters[b].sm2) << "    ";
+            std::cout << parA.name << "    ";
+            std::cout << parA.m << "    ";
+            std::cout << std::sqrt(parA.sm2) << "    ";
+            std::cout << parA.ks << "    ";
+            std::cout << parB.name << "    ";
+            std::cout << parB.m << "    ";
+            std::cout << std::sqrt(parB.sm2) << "    ";
+            std::cout << parB.ks << "    ";
             std::cout << r;
             std::cout << '\n';
 
@@ -746,6 +830,7 @@ public:
 
         }
         else if (method == Method::DIRECT) {
+#ifdef ENABLE_DIRECT
             for (const auto &i : parameters) {
                 m = i.sum/i.n;
                 sm = std::sqrt(i.dsm2/i.n);
@@ -780,6 +865,7 @@ public:
                 std::cout << '\n';
 #endif
             }
+#endif
         }
 
         if (f.is_open()) {
@@ -844,7 +930,7 @@ public:
         return true;
     }
 
-    static double ks(std::vector<float> &v, double m, double s)
+    static double kolmogorov(std::vector<float> &v, double m, double s)
     {
         std::sort(v.begin(), v.end());
         const size_t N = v.size();
@@ -908,9 +994,9 @@ public:
 
 protected:
     std::vector<Parameter> parameters;
-    std::vector<std::vector<float>> filedump;
-    std::vector<Cell> correlation;
+    std::vector<Cell> matrix;
     Method method = Method::CUMULATIVE;
+    size_t NMAXLIMIT = 5000;
 };
 
 }
