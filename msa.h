@@ -4,24 +4,23 @@
 //
 #pragma once
 
-#include "Gnuplot.h"
 
 #include <sstream>
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <array>
 #include <cmath>
-#include <string>
+#include <iostream>
 
 #include <algorithm>
-#ifdef DEBUG
-#include <chrono>
+
+
+#ifdef ENABLE_OPENMP
+    #include <omp.h>
 #endif
 
-
-#ifdef ENABLE_PARALEL
-    #include <omp.h>
+#ifdef ENABLE_GNUPLOT
+    #include "Gnuplot.h"
 #endif
 
 namespace  msa
@@ -69,7 +68,7 @@ struct Cell
 
     bool operator<(const Cell &that) const
     {
-        return std::abs(this->r) > std::abs(that.r);
+        return std::fabs(this->r) > std::fabs(that.r);
     }
 };
 
@@ -381,10 +380,10 @@ public:
         }
     }
 
-
+#ifdef ENABLE_GNUPLOT
     void plot()
     {
-        #ifdef ENABLE_PARALEL
+        #ifdef ENABLE_OPENMP
         #pragma omp parallel for
         #endif
         for (size_t i = 0; i < parameters.size(); i++) {
@@ -400,6 +399,7 @@ public:
             }
         }
     }
+#endif
 
     void correlation()
     {
@@ -411,7 +411,7 @@ public:
 
         matrix.reserve(( (N/2) * (N-1)/2) );
 
-        #ifdef ENABLE_PARALEL
+        #ifdef ENABLE_OPENMP
         #pragma omp parallel for
         #endif
         for (size_t i = 0; i < N; i++)  {
@@ -464,7 +464,7 @@ public:
         double sumA = 0.0f, sumB = 0.0f, sumAB = 0.0f;
         double sumA2 = 0.0f, sumB2 = 0.0f;
 
-        #ifdef ENABLE_PARALEL
+        #ifdef ENABLE_OPENMP
         #pragma omp parallel for
         #endif
         for (size_t i = 0; i < n; i++) {
@@ -486,7 +486,7 @@ public:
 
         const double result = (n*sumAB - sumA*sumB) / std::sqrt( (n*sumA2 - sumA*sumA ) * (n*sumB2 - sumB*sumB) );
 
-        return (abs(result) < 1.0f && abs(result) > 0.8f) ? result : 0.0f;
+        return (std::fabs(result) < 1.0f && std::fabs(result) > 0.8f) ? result : 0.0f;
     }
 
 
@@ -497,7 +497,7 @@ public:
             return;
         }
 
-        #ifdef ENABLE_PARALEL
+        #ifdef ENABLE_OPENMP
         #pragma omp parallel for
         #endif
         for (size_t i = 0; i < parameters.size(); i++) {
@@ -923,8 +923,9 @@ public:
 public:
     static bool is_float(const std::string &s)
     {
-        constexpr std::array<char, 11> digits = {'.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+//        constexpr std::array<char, 11> digits = {'.', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
+        constexpr char digits[] = ".0123456789";
         bool point = false;
 
         auto it = s.begin();
@@ -966,7 +967,7 @@ public:
         double Dn = 0.0f;
 
         for (size_t i = 1; i < N; i++) {
-            double d = std::abs( phi(v[i], m, s) - static_cast<double>(i)/static_cast<double>(N) );
+            double d = std::fabs( phi(v[i], m, s) - static_cast<double>(i)/static_cast<double>(N) );
             if (Dn < d) {
                 Dn = d;
             }
@@ -996,7 +997,7 @@ public:
         if (x < 0) {
             sign = -1;
         }
-        x = abs(x)/M_SQRT2;
+        x = std::fabs(x)/M_SQRT2;
 
         // A&S formula 7.1.26
         double t = 1.0/(1.0 + p*x);

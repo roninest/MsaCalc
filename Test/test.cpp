@@ -1,4 +1,4 @@
-#define ENABLE_PARALEL
+#define ENABLE_OPENMP
 #include "../msa.h"
 #include "../Gnuplot.h"
 
